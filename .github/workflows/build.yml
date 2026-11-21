@@ -143,9 +143,22 @@ jobs:
           import java.util.HashMap;
           import java.util.Map;
 
+          import org.json.JSONObject;
+
           public class MainActivity extends Activity {
               private static final String HOST = "game.local";
               private WebView web;
+
+              private void dbg(final String m) {
+                  runOnUiThread(new Runnable() {
+                      @Override
+                      public void run() {
+                          if (web != null) {
+                              web.evaluateJavascript("window.dbg&&window.dbg(" + JSONObject.quote(m) + ")", null);
+                          }
+                      }
+                  });
+              }
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -167,6 +180,7 @@ jobs:
                       public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                           Uri u = request.getUrl();
                           if (!HOST.equals(u.getHost())) {
+                              dbg("EXTERNAL " + u);
                               return null;
                           }
                           String path = u.getPath();
@@ -177,8 +191,12 @@ jobs:
                           headers.put("Access-Control-Allow-Origin", "*");
                           try {
                               InputStream in = getAssets().open("www" + path);
+                              if (!path.startsWith("/ruffle/") && !path.endsWith(".mp3")) {
+                                  dbg("GET " + path);
+                              }
                               return new WebResourceResponse(mime(path), null, 200, "OK", headers, in);
                           } catch (Exception e) {
+                              dbg("404 " + path);
                               return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
                                       headers, new ByteArrayInputStream(new byte[0]));
                           }
@@ -244,8 +262,29 @@ jobs:
           <style>
             html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
             #c { position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+            #dbg { position: fixed; left: 0; top: 0; right: 0; max-height: 60%; overflow: hidden; z-index: 99999;
+                   pointer-events: none; color: #0f0; background: rgba(0,0,0,0.65); font: 11px monospace;
+                   white-space: pre-wrap; padding: 2px; }
           </style>
           <script>
+            var DBG = [];
+            window.dbg = function (m) {
+              DBG.push(String(m));
+              if (DBG.length > 30) DBG.shift();
+              var d = document.getElementById("dbg");
+              if (d) d.textContent = DBG.join("\n");
+            };
+            ["log", "info", "warn", "error"].forEach(function (k) {
+              var o = console[k];
+              console[k] = function () {
+                try { window.dbg(k + ": " + Array.prototype.slice.call(arguments).join(" ").slice(0, 300)); } catch (e) {}
+                o.apply(console, arguments);
+              };
+            });
+            window.addEventListener("error", function (e) {
+              window.dbg("ERR " + (e.message || (e.target && (e.target.src || e.target.href))));
+            }, true);
+            window.addEventListener("unhandledrejection", function (e) { window.dbg("REJ " + e.reason); });
             window.RufflePlayer = window.RufflePlayer || {};
             window.RufflePlayer.config = {
               publicPath: "https://game.local/ruffle/",
@@ -255,21 +294,29 @@ jobs:
               splashScreen: false,
               warnOnUnsupportedContent: false,
               contextMenu: "off",
-              maxExecutionDuration: 60
+              maxExecutionDuration: 60,
+              logLevel: "info"
             };
           </script>
           <script src="https://game.local/ruffle/ruffle.js"></script>
           </head>
           <body>
           <div id="c"></div>
+          <div id="dbg"></div>
           <script>
             window.addEventListener("load", function () {
-              var ruffle = window.RufflePlayer.newest();
-              var player = ruffle.createPlayer();
-              player.style.width = "100%";
-              player.style.height = "100%";
-              document.getElementById("c").appendChild(player);
-              player.load({ url: "https://game.local/game/main.swf" });
+              try {
+                var ruffle = window.RufflePlayer.newest();
+                window.dbg("Ruffle version: " + ruffle.version);
+                var player = ruffle.createPlayer();
+                player.style.width = "100%";
+                player.style.height = "100%";
+                document.getElementById("c").appendChild(player);
+                var p = player.load({ url: "https://game.local/game/main.swf" });
+                if (p && p.catch) p.catch(function (e) { window.dbg("LOAD FAILED: " + e); });
+              } catch (e) {
+                window.dbg("STARTUP ERROR: " + e);
+              }
             });
           </script>
           </body>
@@ -295,6 +342,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "apk-${{ github.run_number }}" FinnAndBones.apk \
+          gh release create "apk-${{ github.run_id }}" FinnAndBones.apk \
             --title "Finn and Bones APK #${{ github.run_number }}" \
             --notes "Debug-signed build. Install FinnAndBones.apk on your phone."
