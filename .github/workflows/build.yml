@@ -97,7 +97,6 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET" />
               <application
                   android:label="Finn and Bones"
-                  android:icon="@drawable/ic_launcher"
                   android:allowBackup="false"
                   android:hardwareAccelerated="true"
                   android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
@@ -115,14 +114,13 @@ jobs:
           </manifest>
           EOF_MANIFEST
 
-          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF_ICON'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp" android:height="108dp"
-              android:viewportWidth="108" android:viewportHeight="108">
-              <path android:fillColor="#1E88E5" android:pathData="M0,0h108v108h-108z" />
-              <path android:fillColor="#FFFFFF" android:pathData="M30,32h48v12h-48z M30,52h32v12h-32z M30,72h12v12h-12z" />
-          </vector>
-          EOF_ICON
+          if [ -f icon.jpg ]; then
+            mkdir -p app/src/main/res/mipmap-nodpi app/src/main/res/mipmap-anydpi-v26 app/src/main/res/drawable-nodpi
+            cp icon.jpg app/src/main/res/mipmap-nodpi/ic_launcher.jpg
+            cp icon.jpg app/src/main/res/drawable-nodpi/ic_icon_bg.jpg
+            printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">' ' <background android:drawable="@drawable/ic_icon_bg" />' ' <foreground android:drawable="@android:color/transparent" />' '</adaptive-icon>' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+            sed -i 's|android:label="Finn and Bones"|android:label="Finn and Bones" android:icon="@mipmap/ic_launcher"|' app/src/main/AndroidManifest.xml
+          fi
 
           cat > app/src/main/java/com/example/finnandbones/MainActivity.java <<'EOF_JAVA'
           package com.example.finnandbones;
@@ -190,7 +188,13 @@ jobs:
                           Map<String, String> headers = new HashMap<>();
                           headers.put("Access-Control-Allow-Origin", "*");
                           try {
-                              InputStream in = getAssets().open("www" + path);
+                                        InputStream in;
+                              try {
+                                  in = getAssets().open("www" + path);
+                              } catch (Exception first) {
+                                  in = getAssets().open("www/game" + path);
+                                  path = "/game" + path;
+                              }
                               if (!path.startsWith("/ruffle/") && !path.endsWith(".mp3")) {
                                   dbg("GET " + path);
                               }
@@ -268,6 +272,7 @@ jobs:
           </style>
           <script>
             var DBG = [];
+            setTimeout(function () { var d = document.getElementById("dbg"); if (d) d.style.display = "none"; }, 20000);
             window.dbg = function (m) {
               DBG.push(String(m));
               if (DBG.length > 30) DBG.shift();
@@ -312,7 +317,7 @@ jobs:
                 player.style.width = "100%";
                 player.style.height = "100%";
                 document.getElementById("c").appendChild(player);
-                var p = player.load({ url: "https://game.local/game/main.swf" });
+                var p = player.load({ url: "https://game.local/game/main.swf", base: "https://game.local/game/" });
                 if (p && p.catch) p.catch(function (e) { window.dbg("LOAD FAILED: " + e); });
               } catch (e) {
                 window.dbg("STARTUP ERROR: " + e);
