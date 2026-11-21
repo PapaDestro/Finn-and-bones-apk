@@ -299,7 +299,8 @@ jobs:
               splashScreen: false,
               warnOnUnsupportedContent: false,
               contextMenu: "off",
-              maxExecutionDuration: 60,
+                         maxExecutionDuration: 60,
+              quality: "high",
               logLevel: "info"
             };
           </script>
